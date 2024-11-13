@@ -38,14 +38,15 @@ def decodificar_dados_zona(zona_dados):
     #zona_dados é o valor de um dicionario dentro de uma lista de dicionarios
     #zona_dados é um dicionario
     try:
-        zona_numero = zona_dados[8:10]
-        direcao_vento = int(zona_dados[10:13]) * 10  # Convertendo para mils
-        velocidade_vento = int(zona_dados[13:16])  # knots
-        temperatura = int(zona_dados[16:20]) / 10.0  # Kelvin
-        pressao = int(zona_dados[20:24])  # mb
+        
+        zona_numero = zona_dados[len(zona_dados) - 16:len(zona_dados) -14]
+        direcao_vento = int(zona_dados[len(zona_dados) - 14:len(zona_dados) - 11]) * 10  # Convertendo para mils
+        velocidade_vento = int(zona_dados[len(zona_dados) - 11:len(zona_dados) - 8])  # knots
+        temperatura = int(zona_dados[len(zona_dados) - 8:len(zona_dados) - 4]) / 10.0  # Kelvin
+        pressao = int(zona_dados[len(zona_dados) - 4:len(zona_dados)])  # mb
 
         return [
-            (f"Zona: {zona_numero} ({int(zona_numero) * 100}m)", "map-marker"),
+            (f"Zona: {zona_numero}", "map-marker"),
             (f"Direção do Vento: {direcao_vento} mils", "compass"),
             (f"Velocidade do Vento: {velocidade_vento} nós", "weather-windy"),
             (f"Temperatura Virtual: {temperatura:.1f} K", "thermometer"),
@@ -78,7 +79,10 @@ def buscar_dados_altura(altura_str):
         for zona, (altura_min, altura_max) in zonas.items():
         #   key    value1      value2         
             if int(altura_min) <= int(altura) <= int(altura_max):
-                zona_certo = zona[1:]
+                if zona[0] == "0":
+                    zona_certo = zona[1:]
+                else:
+                    zona_certo = zona
                 zona_encontrada = f"zona{zona_certo}"
                 break
         # o loop é verdadeiro
