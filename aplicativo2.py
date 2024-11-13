@@ -6,7 +6,6 @@ from kivymd.uix.button import MDRaisedButton
 from kivymd.uix.label import MDLabel
 from kivymd.uix.list import OneLineIconListItem, IconLeftWidget
 from kivy.core.window import Window
-from kivy.uix.popup import Popup
 from kivy.clock import Clock
 import socket
 import threading
@@ -20,6 +19,9 @@ boletins_salvos = []
 
 # Função para processar e salvar o boletim na memória
 def processar_boletim(dados_boletim):
+    """
+    Processa a mensagem recebida, salvando os dados de cada zona em uma estrutura de dicionário.
+    """
     global boletins_salvos
     boletim = {}
     zonas = ["METCMQ", "LaLaLaLoLoLo", "YYGoGoGoG", "hhhPdPdPd"] + [f"zona{i}" for i in range(32)]
@@ -28,28 +30,40 @@ def processar_boletim(dados_boletim):
         boletim[campo] = dados_boletim[i] if i < len(dados_boletim) else "N/A"
     boletim["horario_salvo"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     boletins_salvos.append(boletim)
+    print("Boletim atualizado:", boletim)  # Para depuração
 
-# Função para interpretar o cabeçalho
-def interpretar_cabecalho(boletim):
-    metcmq = f"ID: {boletim['METCMQ']}"
-    lat_lon = f"Lat/Lon: {boletim['LaLaLaLoLoLo'][:3]}°N, {boletim['LaLaLaLoLoLo'][3:]}°W"
-    data = f"Data: {boletim['YYGoGoGoG'][:2]}/{boletim['YYGoGoGoG'][2:4]}, {boletim['YYGoGoGoG'][4:6]}:{boletim['YYGoGoGoG'][6:]} GMT"
-    altura_pressao = f"Altura: {boletim['hhhPdPdPd'][:3]} dm, Pressão: {boletim['hhhPdPdPd'][3:]} mb"
-    
-    return [
-        (metcmq, "information"),
-        (lat_lon, "map"),
-        (data, "calendar"),
-        (altura_pressao, "gauge")
-    ]
+# Função para decodificar a string da zona
+def decodificar_dados_zona(zona_dados):
+    #zona_dados = boletins_salvos[-1][zona_encontrada]
+    #zona_dados é o valor de um dicionario dentro de uma lista de dicionarios
+    #zona_dados é um dicionario
+    try:
+        
+        zona_numero = zona_dados[len(zona_dados) - 16:len(zona_dados) -14]
+        direcao_vento = int(zona_dados[len(zona_dados) - 14:len(zona_dados) - 11]) * 10  # Convertendo para mils
+        velocidade_vento = int(zona_dados[len(zona_dados) - 11:len(zona_dados) - 8])  # knots
+        temperatura = int(zona_dados[len(zona_dados) - 8:len(zona_dados) - 4]) / 10.0  # Kelvin
+        pressao = int(zona_dados[len(zona_dados) - 4:len(zona_dados)])  # mb
+
+        return [
+            (f"Zona: {zona_numero}", "map-marker"),
+            (f"Direção do Vento: {direcao_vento} mils", "compass"),
+            (f"Velocidade do Vento: {velocidade_vento} nós", "weather-windy"),
+            (f"Temperatura Virtual: {temperatura:.1f} K", "thermometer"),
+            (f"Pressão do Ar: {pressao} mb", "gauge")
+        ]
+    except (ValueError, IndexError) as e:
+        return [(f"Erro na decodificação dos dados: {e}", "alert")]
 
 # Função para buscar dados de uma zona com base na altura
-def buscar_dados_altura(altura):
+def buscar_dados_altura(altura_str):
     if not boletins_salvos:
         return [("Nenhum boletim foi recebido ainda.", "alert")]
+    #nao da esse erro -> boletins_salvos = true
 
+    # Mapeamento de alturas para zonas (usando strings para evitar conflitos de tipo)
     zonas = {
-        "00": (0, 200), "01": (0, 200), "02": (200, 500), "03": (500, 1000),
+        "00": (0, 0), "01": (0, 200), "02": (200, 500), "03": (500, 1000),
         "04": (1000, 1500), "05": (1500, 2000), "06": (2000, 2500), "07": (2500, 3000),
         "08": (3000, 3500), "09": (3500, 4000), "10": (4000, 4500), "11": (4500, 5000),
         "12": (5000, 5500), "13": (6000, 7000), "14": (7000, 8000), "15": (8000, 9000),
@@ -59,16 +73,34 @@ def buscar_dados_altura(altura):
         "28": (22000, 24000), "29": (24000, 26000), "30": (26000, 28000), "31": (28000, 30000),
     }
 
-    zona_encontrada = None
-    for zona, (altura_min, altura_max) in zonas.items():
-        if altura_min <= altura <= altura_max:
-            zona_encontrada = f"zona{zona}"
-            break
+    try:
+        altura = int(altura_str) #parametro recebido em buscar_dados_altura -> garanto que é inteiro
+        zona_encontrada = None #defino zona_encontrada
+        for zona, (altura_min, altura_max) in zonas.items():
+        #   key    value1      value2         
+            if int(altura_min) <= int(altura) <= int(altura_max):
+                if zona[0] == "0":
+                    zona_certo = zona[1:]
+                    zona_certo = int(zona_certo) + 1
+                    zona_certo = str(zona_certo)
+                else:
+                    zona_certo = int(zona)
+                    zona_certo += 1
+                    zona_certo = str(zona_certo)
+                zona_encontrada = f"zona{zona_certo}"
+                break
+        # o loop é verdadeiro
 
-    if zona_encontrada and zona_encontrada in boletins_salvos[-1]:
-        return [(f"Dados para altura {altura} metros (Zona {zona}): {boletins_salvos[-1][zona_encontrada]}", "weather-windy")]
-    else:
-        return [("Altura fora do intervalo suportado ou dados não disponíveis.", "alert")]
+        #print(boletins_salvos)
+        #print(zona_encontrada)
+
+        if zona_encontrada and zona_encontrada in boletins_salvos[-1]:
+            zona_dados = boletins_salvos[-1][zona_encontrada]
+            return decodificar_dados_zona(zona_dados)
+        else:
+            return [("Altura fora do intervalo suportado ou dados não disponíveis.", "alert")]
+    except ValueError:
+        return [("Por favor, insira uma altura válida em metros.", "alert")]
 
 class AlturaApp(MDApp):
     def build(self):
@@ -96,15 +128,14 @@ class AlturaApp(MDApp):
             hint_text="Porta para Receber UDP",
             input_filter="int",
             font_size=18,
-            size_hint=(1, None),
-            height=40,
+            size_hint=(1, 0.2),
             pos_hint={"center_x": 0.5}
         )
         layout_principal.add_widget(self.port_input)
 
         btn_iniciar = MDRaisedButton(
             text="Iniciar Recepção",
-            size_hint=(1, None),
+            size_hint=(0.8, None),
             height=50,
             pos_hint={"center_x": 0.5},
             on_press=self.iniciar_recebimento
@@ -115,24 +146,24 @@ class AlturaApp(MDApp):
             hint_text="Digite a altura em metros (máximo 30000)",
             helper_text="Exemplo: 5000",
             helper_text_mode="on_focus",
-            input_filter="int",
+            input_filter=None,
             font_size=18,
-            size_hint=(1, None),
-            height=50,
-            pos_hint={"center_x": 0.5}
+            size_hint_x=0.9,
+            pos_hint={"center_x": 0.5},
+            on_text_validate=self.buscar_dados
         )
         layout_principal.add_widget(self.entrada_altura)
 
         btn_buscar = MDRaisedButton(
             text="Buscar Dados",
-            size_hint=(1, None),
+            size_hint=(0.5, None),
             height=50,
             pos_hint={"center_x": 0.5},
             on_press=self.buscar_dados
         )
         layout_principal.add_widget(btn_buscar)
 
-        scrollview = ScrollView(size_hint=(1, 1))
+        scrollview = ScrollView(size_hint=(1, 0.6))
         self.resultado_layout = MDBoxLayout(orientation="vertical", spacing=10, padding=10, size_hint_y=None)
         self.resultado_layout.bind(minimum_height=self.resultado_layout.setter('height'))
         scrollview.add_widget(self.resultado_layout)
@@ -143,7 +174,7 @@ class AlturaApp(MDApp):
 
     def iniciar_recebimento(self, instance):
         if not self.port_input.text.isdigit():
-            self.exibir_popup("Por favor, insira uma porta válida para recepção.")
+            self.status_inicial.text = "Por favor, insira uma porta válida para recepção."
             return
         self.porta_recepcao = int(self.port_input.text.strip())
         
@@ -157,37 +188,17 @@ class AlturaApp(MDApp):
             sock.bind(("", self.porta_recepcao))
             while True:
                 dados, _ = sock.recvfrom(4096)
-                mensagem = dados.decode()
-                dados_boletim = [linha for linha in mensagem.split("\n") if linha.strip()]
-                processar_boletim(dados_boletim)
+                mensagem = dados.decode().split("\n")
+                processar_boletim(mensagem)
                 Clock.schedule_once(lambda dt: self.update_status("Dados recebidos e processados com sucesso!"))
 
     def update_status(self, message):
         self.status_inicial.text = message
 
-    def buscar_dados(self, instance):
+    def buscar_dados(self, instance=None):
         altura_texto = self.entrada_altura.text.strip()
-        if not altura_texto.isdigit():
-            self.exibir_popup("Por favor, insira uma altura válida em metros.")
-            return
-        altura = int(altura_texto)
-        resultado = buscar_dados_altura(altura)
+        resultado = buscar_dados_altura(altura_texto)
         self.mostrar_resultado(resultado)
-
-    def exibir_popup(self, mensagem):
-        popup = Popup(
-            title="Notificação",
-            content=MDLabel(
-                text=mensagem,
-                theme_text_color="Custom",
-                text_color=[1, 1, 1, 1],  # Texto branco
-                halign="center",
-                valign="middle"
-            ),
-            size_hint=(0.8, 0.3),
-            background_color=[0, 0, 0, 0.7]  # Fundo escuro
-        )
-        popup.open()
 
     def mostrar_resultado(self, resultado):
         self.resultado_layout.clear_widgets()
