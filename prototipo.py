@@ -81,8 +81,12 @@ def buscar_dados_altura(altura_str):
             if int(altura_min) <= int(altura) <= int(altura_max):
                 if zona[0] == "0":
                     zona_certo = zona[1:]
+                    zona_certo = int(zona_certo) + 1
+                    zona_certo = str(zona_certo)
                 else:
-                    zona_certo = zona
+                    zona_certo = int(zona)
+                    zona_certo += 1
+                    zona_certo = str(zona_certo)
                 zona_encontrada = f"zona{zona_certo}"
                 break
         # o loop é verdadeiro
